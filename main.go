@@ -260,8 +260,6 @@ func loop() {
 
 func main() {
 	log.SetOutput(logBuffer)
-	srcDir, _ = filepath.Abs("./test-in")
-	dstDir, _ = filepath.Abs("./test-out")
 	wnd := g.NewMasterWindow("图像去黑边工具"+version, 800, 600, 0)
 	// 设置icon
 	f, err := embedFs.Open("icon.png")
