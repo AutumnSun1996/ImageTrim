@@ -21,9 +21,9 @@ import (
 
 	g "github.com/AllenDang/giu"
 	"github.com/disintegration/imaging"
+	"github.com/harry1453/go-common-file-dialog/cfd"
 	"github.com/kolesa-team/go-webp/encoder"
 	"github.com/kolesa-team/go-webp/webp"
-	"github.com/sqweek/dialog"
 )
 
 var (
@@ -41,18 +41,24 @@ var embedFs embed.FS
 //go:embed winres/version.txt
 var version string
 
-func SelectSrcFile() {
-	filename, err := dialog.Directory().Browse()
-	if err == nil {
-		srcDir = filename
-	} else {
-		fmt.Println("ERR:", err)
+func PickDir(title string, startDir string) (string, error) {
+	pickFolderDialog, err := cfd.NewSelectFolderDialog(cfd.DialogConfig{
+		Title: title,
+		Role:  "ImageFolder",
+	})
+	if err != nil {
+		return "", err
 	}
+	if err := pickFolderDialog.Show(); err != nil {
+		return "", err
+	}
+	result, err := pickFolderDialog.GetResult()
+	return result, err
 }
 
 func DirSelector(name string, target *string) *g.RowWidget {
 	return g.Row(g.Button(name).OnClick(func() {
-		filename, err := dialog.Directory().Title("选择" + name).SetStartDir(*target).Browse()
+		filename, err := PickDir("选择"+name, *target)
 		if err == nil {
 			*target = filename
 		} else {
