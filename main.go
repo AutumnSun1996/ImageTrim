@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"image"
 	"io"
+	"math"
 	"os"
 	"strings"
 
@@ -13,6 +14,7 @@ import (
 	"log"
 	"path/filepath"
 
+	"image/color"
 	_ "image/gif"
 	_ "image/jpeg"
 	_ "image/png"
@@ -27,9 +29,10 @@ import (
 )
 
 var (
-	threshold int32  = 20
-	srcDir    string = ""
-	dstDir    string = ""
+	threshold  int32  = 20
+	srcDir     string = ""
+	dstDir     string = ""
+	allowColor bool   = false
 )
 var logBuffer = bytes.NewBufferString("")
 
@@ -76,39 +79,14 @@ func isImageExt(ext string) bool {
 	return false
 }
 
-func rotate(matrix [][]int) {
-	row := len(matrix)
-	if row <= 0 {
-		return
-	}
-	column := len(matrix[0])
-
-	for i := 0; i < row; i++ {
-		for j := i + 1; j < column; j++ {
-			tmp := matrix[i][j]
-			matrix[i][j] = matrix[j][i]
-			matrix[j][i] = tmp
-		}
-	}
-
-	halfColumn := column / 2
-	for i := 0; i < row; i++ {
-		for j := 0; j < halfColumn; j++ {
-			tmp := matrix[i][j]
-			matrix[i][j] = matrix[i][column-j-1]
-			matrix[i][column-j-1] = tmp
-		}
-	}
-}
-
-func getBorder(img *image.NRGBA, tol uint8) int {
+func getBorder(img *image.NRGBA, targetColor color.Color) int {
 	bounds := img.Bounds()
 	for x := 0; x < bounds.Max.X; x++ {
 		for y := 0; y < bounds.Max.Y; y++ {
-			c := img.NRGBAAt(x, y)
-			if c.A > tol && (c.R > tol || c.G > tol || c.B > tol) {
-				// 出现非0像素, 返回列坐标
-				// log.Printf("非0像素: %dx%d (tol=%d) %v\n", x, y, tol, c)
+			c := img.At(x, y)
+			if !isSimilarColor(c, targetColor) {
+				// 出现非目标颜色, 返回列坐标
+				// log.Printf("非目标颜色: %dx%d %v\n", x, y, c)
 				return x
 			}
 		}
@@ -160,6 +138,19 @@ func saveWebp(img image.Image, path string) error {
 	return nil
 }
 
+// 判断两个颜色是否相似
+func isSimilarColor(c1, c2 color.Color) bool {
+	r1, g1, b1, _ := c1.RGBA()
+	r2, g2, b2, _ := c2.RGBA()
+	dr := int64(r1) - int64(r2)
+	dg := int64(g1) - int64(g2)
+	db := int64(b1) - int64(b2)
+
+	dist := math.Sqrt(float64(dr*dr+dg*dg+db*db) / (3 * 256 * 256))
+	// log.Printf("Dist: %v %v => %.3f", c1, c2, dist)
+	return int32(dist) <= threshold
+}
+
 func handleImage(path string, dstPath string) bool {
 	orignalImg, err := imaging.Open(path)
 	if err != nil {
@@ -168,12 +159,20 @@ func handleImage(path string, dstPath string) bool {
 	}
 
 	showSize("原始图像", orignalImg)
+	var targetColor color.Color
+
+	if allowColor {
+		targetColor = orignalImg.At(0, 0)
+	} else {
+		targetColor = color.NRGBA{0, 0, 0, 255}
+	}
+	log.Printf("目标颜色: %v\n", targetColor)
 	// 裁剪实现流程: 每次旋转90度并裁剪图像左侧部分, 重复4次
 	img := imaging.Rotate90(orignalImg)
 	trimmed := []int{}
 	same := true
 	for i := 0; i < 4; i++ {
-		delta := getBorder(img, uint8(threshold))
+		delta := getBorder(img, targetColor)
 		trimmed = append(trimmed, delta)
 		// imaging.Save(img, fmt.Sprintf("%s-%d.png", dstPath, i))
 		if delta > 0 {
@@ -258,6 +257,7 @@ func loop() {
 		DirSelector("输出目录", &dstDir),
 		g.Row(
 			g.Row(g.Label("阈值[0,200]"), g.InputInt(&threshold).Size(40)),
+			g.Checkbox("支持其他颜色", &allowColor),
 			g.Button("开始转换").Disabled(!canTransfer).OnClick(doTransfer),
 		),
 		g.Label(logBuffer.String()),
