@@ -13,3 +13,10 @@
 
 # Dependency directories (remove the comment below to include it)
 # vendor/
+
+*.7z
+*.zip
+test-in
+test-out
+*.tmp
+/ImageTrim.json
